@@ -1,33 +1,38 @@
 const axios = require('axios');
+
 module.exports.config = {
-  name: 'ai',
-  version: '1.0.0',
+  name: "ai",
+  version: "69",
   role: 0,
+  credits: "OtinXSandip", // converted by kira
+  description: "ask AI",
+  usages: "ask <question>",
   hasPrefix: false,
-  aliases: ['gpt', 'openai'],
-  description: "An AI command powered by GPT-4",
-  usage: "Ai [promot]",
-  credits: 'Developer',
-  cooldown: 3,
+  commandCategory: "ai",
+  cooldowns: 0
 };
-module.exports.run = async function({
-  api,
-  event,
-  args
-}) {
-  const input = args.join(' ');
-  if (!input) {
-    api.sendMessage(`Please provide a question or statement after 'ai'. For example: 'ai What is the capital of France?'`, event.threadID, event.messageID);
-    return;
-  }
-  api.sendMessage(`🔍 "${input}"`, event.threadID, event.messageID);
+  
+module.exports.run = async function ({ api, event, args, message }) {
   try {
-    const {
-      data
-    } = await axios.get(`https://api-soyeon.onrender.com/api?prompt=${encodeURIComponent(input)}`);
-    const response = data.response;
-    api.sendMessage(response, event.threadID, event.messageID);
+    const prompt = event.body.trim();
+    if (!prompt) {
+      await api.sendMessage({ body: "Hey I am Ai, ask me questions dear 🤖" }, event.threadID);
+      return;
+    }
+    api.setMessageReaction("🔎", event.messageID, (err) => {}, true);
+    const response = await axios.get(`https://sandipapi.onrender.com/gpt?prompt=${encodeURIComponent(prompt)}`);
+    api.setMessageReaction("✅", event.messageID, (err) => {}, true);
+    const answer = response.data.answer;
+
+    await api.sendMessage({
+      body: `𝗕𝗢𝗧 𝗥𝗘𝗦𝗣𝗢𝗡𝗦𝗘 | 🟢
+━━━━━━━━━━━━━━━━━━        
+${answer}
+━━━━━━━━━━━━━━━━━━\n\n- 𝚃𝚑𝚒𝚜 𝚋𝚘𝚝 𝚞𝚗𝚍𝚎𝚛 𝙳𝚎𝚟𝚎𝚕𝚘𝚙𝚎𝚍 𝚋𝚢 chill\n• 𝐅𝐛𝐥𝐢𝐧𝐤: >>https://www.facebook.com/profile.php?id=churchill.abing00<<`,
+    }, event.threadID);
+
   } catch (error) {
-    api.sendMessage('An error occurred while processing your request.', event.threadID, event.messageID);
+    console.error("🔴 An error occurred while processing your request.\nPlease contact chill for an error", error.message);
+    api.setMessageReaction("🔴", event.messageID, (err) => {}, true);
   }
 };
