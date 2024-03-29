@@ -1,5 +1,5 @@
 const fs = require('fs-extra');
-const ytdl = require('@distube/ytdl-core');
+const ytdl = require('ytdl-core');
 const Youtube = require('youtube-search-api');
 const axios = require('axios');
 const convertHMS = (value) => new Date(value * 1000).toISOString().slice(11, 19);
@@ -96,25 +96,4 @@ const run = async function ({ api, event, args }) {
                 thumbnails.push(fs.createReadStream(thumbnailPath));
             }
 
-            const body = `There are ${link.length} results matching your search keyword:\n\n${data.map((value, index) => `❍━━━━━━━━━━━━❍\n${index + 1} - ${value?.title} (${value?.length?.simpleText})\n\n`).join('')}❯ Please reply and select one of the above searches`;
-
-            return api.sendMessage({ attachment: thumbnails, body }, event.threadID, (error, info) => {
-                for (let i = 0; i < thumbnails.length; i++) {
-                    fs.unlinkSync(`${__dirname}/cache/thumbnail-${event.senderID}-${i + 1}.jpg`);
-                }
-
-                global.client.handleReply.push({
-                    type: 'reply',
-                    name: config.name,
-                    messageID: info.messageID,
-                    author: event.senderID,
-                    link
-                });
-            }, event.messageID);
-        } catch (e) {
-            return api.sendMessage(`⚠️An error occurred, please try again in a moment!!\n${e}`, event.threadID, event.messageID);
-        }
-    }
-};
-
-module.exports = { config, run, handleReply };
+            const body = `There are ${link.length} results matching your
