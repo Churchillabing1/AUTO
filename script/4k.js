@@ -1,4 +1,4 @@
-const fetch = require('node-fetch');
+const axios = require('axios');
 const shorten = require('url-shortener');
 
 module.exports.config = {
@@ -37,8 +37,8 @@ module.exports.onStart = async function ({ message, args, event, api }) {
         api.sendMessage("ƪ⁠(⁠‾⁠.⁠‾⁠“⁠)⁠┐ | Please wait...", message.threadID);
 
         shorten(imageUrl, async function (shortUrl) {
-            const response = await fetch(`https://www.api.vyturex.com/upscale?imageUrl=${encodeURIComponent(shortUrl)}`);
-            const resultData = await response.json();
+            const response = await axios.get(`https://www.api.vyturex.com/upscale?imageUrl=${encodeURIComponent(shortUrl)}`);
+            const resultData = response.data;
             const resultUrl = resultData.resultUrl;
 
             api.sendMessage({ body: "<⁠(⁠￣⁠︶⁠￣⁠)⁠> | Image Enhanced.", attachment: await global.utils.getStreamFromURL(resultUrl) }, message.threadID);
