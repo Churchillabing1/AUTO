@@ -1,5 +1,5 @@
-const axios = require('axios');
-const tinyurl = require('tinyurl');
+const fetch = require('node-fetch');
+const shorten = require('url-shortener');
 
 module.exports.config = {
     name: "4k",
@@ -33,14 +33,16 @@ module.exports.onStart = async function ({ message, args, event, api }) {
 
     try {
         const imageUrl = await getImageUrl();
-        const shortUrl = await tinyurl.shorten(imageUrl);
 
         api.sendMessage("ƪ⁠(⁠‾⁠.⁠‾⁠“⁠)⁠┐ | Please wait...", message.threadID);
 
-        const response = await axios.get(`https://www.api.vyturex.com/upscale?imageUrl=${shortUrl}`);
-        const resultUrl = response.data.resultUrl;
+        shorten(imageUrl, async function (shortUrl) {
+            const response = await fetch(`https://www.api.vyturex.com/upscale?imageUrl=${encodeURIComponent(shortUrl)}`);
+            const resultData = await response.json();
+            const resultUrl = resultData.resultUrl;
 
-        api.sendMessage({ body: "<⁠(⁠￣⁠︶⁠￣⁠)⁠> | Image Enhanced.", attachment: await global.utils.getStreamFromURL(resultUrl) }, message.threadID);
+            api.sendMessage({ body: "<⁠(⁠￣⁠︶⁠￣⁠)⁠> | Image Enhanced.", attachment: await global.utils.getStreamFromURL(resultUrl) }, message.threadID);
+        });
     } catch (error) {
         api.sendMessage("┐⁠(⁠￣⁠ヘ⁠￣⁠)⁠┌ | Error: " + error.message, message.threadID);
         // Log error for debugging: console.error(error);
