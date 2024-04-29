@@ -1,56 +1,48 @@
 "use strict";
 
-var utils = require("../utils");
-var log = require("npmlog");
+const utils = require("../utils");
+const log = require("npmlog");
 
 module.exports = function(defaultFuncs, api, ctx) {
-  return function deleteMessage(messageOrMessages, callback) {
-    var resolveFunc = function(){};
-    var rejectFunc = function(){};
-    var returnPromise = new Promise(function (resolve, reject) {
-      resolveFunc = resolve;
-      rejectFunc = reject;
-    });
+  return async function deleteMessage(messageOrMessages, callback) {
     if (!callback) {
       callback = function(err) {
         if (err) {
-          return rejectFunc(err);
+          return reject(err);
         }
-        resolveFunc();
+        resolve();
       };
     }
 
-    var form = {
+    const form = {
       client: "mercury"
     };
 
-    if (utils.getType(messageOrMessages) !== "Array") {
-      messageOrMessages = [messageOrMessages];
+    const messages = Array.isArray(messageOrMessages)
+      ? messageOrMessages
+      : [messageOrMessages];
+
+    for (let i = 0; i < messages.length; i++) {
+      form[`message_ids[${i}]`] = messages[i];
     }
 
-    for (var i = 0; i < messageOrMessages.length; i++) {
-      form["message_ids[" + i + "]"] = messageOrMessages[i];
-    }
-
-    defaultFuncs
-      .post(
+    try {
+      const res = await defaultFuncs.post(
         "https://www.facebook.com/ajax/mercury/delete_messages.php",
         ctx.jar,
         form
-      )
-      .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
-      .then(function(resData) {
-        if (resData.error) {
-          throw resData;
-        }
+      );
 
-        return callback();
-      })
-      .catch(function(err) {
-        log.error("deleteMessage", err);
-        return callback(err);
-      });
+      const resData = await utils.parseAndCheckLogin(ctx, defaultFuncs)(res);
 
-    return returnPromise;
+      if (resData.error) {
+        throw resData;
+      }
+
+      return callback();
+    } catch (err) {
+      log.error("deleteMessage", err);
+      return callback(err);
+    }
   };
 };
