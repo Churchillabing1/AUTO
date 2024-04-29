@@ -1,52 +1,44 @@
 "use strict";
 
-var utils = require("../utils");
-var log = require("npmlog");
+const utils = require("../utils");
+const log = require("npmlog");
 
-module.exports = function(defaultFuncs, api, ctx) {
+module.exports = function (defaultFuncs, api, ctx) {
   // muteSecond: -1=permanent mute, 0=unmute, 60=one minute, 3600=one hour, etc.
   return function muteThread(threadID, muteSeconds, callback) {
-    var resolveFunc = function(){};
-    var rejectFunc = function(){};
-    var returnPromise = new Promise(function (resolve, reject) {
-      resolveFunc = resolve;
-      rejectFunc = reject;
-    });
-
-    if (!callback) {
-      callback = function (err, friendList) {
-        if (err) {
-          return rejectFunc(err);
-        }
-        resolveFunc(friendList);
-      };
+    if (typeof muteSeconds !== "number" || muteSeconds < -1) {
+      throw new Error("`muteSeconds` must be a number equal to or greater than -1");
     }
 
-    var form = {
+    const form = {
       thread_fbid: threadID,
-      mute_settings: muteSeconds
+      mute_settings: muteSeconds,
     };
 
-    defaultFuncs
-      .post(
-        "https://www.facebook.com/ajax/mercury/change_mute_thread.php",
-        ctx.jar,
-        form
-      )
-      .then(utils.saveCookies(ctx.jar))
-      .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
-      .then(function(resData) {
+    const promise = defaultFuncs
+      .post("https://www.facebook.com/ajax/mercury/change_mute_thread.php", ctx.jar, form)
+      .then(utils.saveCookies.bind(null, ctx.jar))
+      .then(utils.parseAndCheckLogin.bind(null, ctx, defaultFuncs))
+      .then((resData) => {
         if (resData.error) {
           throw resData;
         }
 
-        return callback();
+        if (callback) {
+          return callback();
+        }
       })
-      .catch(function(err) {
+      .catch((err) => {
+        if (callback) {
+          return callback(err);
+        }
+
         log.error("muteThread", err);
-        return callback(err);
+        throw err;
       });
 
-    return returnPromise;
+    if (!callback) {
+      return promise;
+    }
   };
 };
