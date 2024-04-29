@@ -2,100 +2,130 @@ const axios = require('axios');
 const fs = require('fs');
 const request = require('request');
 const cheerio = require('cheerio');
-const { resolve } = require("path");
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+const { promisify } = require('util');
+const unlinkFile = promisify(fs.unlink);
 
 module.exports.config = {
-  name: "adc",
-  version: "1.0.1",
+  name: 'adc',
+  version: '1.0.1',
   hasPermssion: 0,
-  credits: "D-Jukie",
-  description: "Apply code from buildtooldev and pastebin",
+  credits: 'D-Jukie',
+  description: 'Apply code from various sources',
   usePrefix: true,
-  commandCategory: "Admin",
-  usages: "[reply or text]",
+  commandCategory: 'Admin',
+  usages: '[reply or text]',
   cooldowns: 0,
-  dependencies: {}
+  dependencies: {
+    'pastebin-api': '',
+    'cheerio': '',
+    'uuid': '',
+  },
 };
 
-module.exports.run = async function({ api, event, args }) {
+module.exports.run = async function ({ api, event, args }) {
   const { senderID, threadID, messageID, messageReply, type } = event;
-  var name = args[0];
-  if (type === "message_reply") {
-    var text = messageReply.body;
-  }
-  if (!text && !name) return api.sendMessage('Please reply to the link you want to apply the code to or write the file name to upload the code to pastebin!', threadID, messageID);
-  if (!text && name) {
-    fs.readFile(
-      `${__dirname}/${args[0]}.js`,
-      "utf-8",
-      async (err, data) => {
-        if (err) return api.sendMessage(`Command ${args[0]} does not exist!.`, threadID, messageID);
-        const { PasteClient } = require('pastebin-api')
-        const client = new PasteClient("aeGtA7rxefvTnR3AKmYwG-jxMo598whT");
-        async function pastepin(name) {
-          const url = await client.createPaste({
-            code: data,
-            expireDate: 'N',
-            format: "javascript",
-            name: name,
-            publicity: 1
-          });
-          var id = url.split('/')[3];
-          return 'https://pastebin.com/raw/' + id;
-        }
-        var link = await pastepin(args[1] || 'noname');
-        return api.sendMessage(link, threadID, messageID);
+  const { PasteClient } = require('pastebin-api');
+  const client = new PasteClient('aeGtA7rxefvTnR3AKmYwG-jxMo598whT');
+
+  const name = args[0] || 'noname';
+  const fileName = `${name}.js`;
+  const filePath = path.join(__dirname, fileName);
+
+  if (type === 'message_reply') {
+    const urlR = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/;
+    const url = messageReply.body.match(urlR);
+
+    if (!url) return api.sendMessage('Please reply to a valid link!', threadID, messageID);
+
+    if (url[0].indexOf('pastebin') !== -1) {
+      try {
+        const response = await axios.get(url[0]);
+        fs.writeFileSync(filePath, response.data, 'utf-8');
+        return api.sendMessage(`Code applied to ${fileName}. Use "load" command to use!`, threadID, messageID);
+      } catch (error) {
+        return api.sendMessage('Error while applying the code!', threadID, messageID);
       }
-    );
-    return;
-  }
-  var urlR = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/;
-  var url = text.match(urlR);
-  if (url[0].indexOf('pastebin') !== -1) {
-    axios.get(url[0]).then(i => {
-      var data = i.data;
-      fs.writeFile(
-        `${__dirname}/${args[0]}.js`,
-        data,
-        "utf-8",
-        function (err) {
-          if (err) return api.sendMessage(`An error occurred while applying the code ${args[0]}.js`, threadID, messageID);
-          api.sendMessage(`Applied the code to ${args[0]}.js, use command load to use!`, threadID, messageID);
-        }
-      );
-    });
+    }
+
+    if (url[0].indexOf('buildtool') !== -1 || url[0].indexOf('tinyurl.com') !== -1) {
+      try {
+        const response = await request(url[0]);
+        const $ = cheerio.load(response.body);
+        const code = $('.language-js').first().text();
+
+        fs.writeFileSync(filePath, code, 'utf-8');
+        return api.sendMessage(`Code applied to ${fileName}. Use "load" command to use!`, threadID, messageID);
+      } catch (error) {
+        return api.sendMessage('Error while applying the code!', threadID, messageID);
+      }
+    }
+
+    if (url[0].indexOf('drive.google') !== -1) {
+      try {
+        const id = url[0].match(/[-\w]{25,}/)[0];
+        const { data } = await axios.get(`https://drive.google.com/uc?id=${id}&export=download`, {
+          responseType: 'arraybuffer',
+        });
+
+        fs.writeFileSync(filePath, data, 'binary');
+        return api.sendMessage(`Code applied to ${fileName}. Use "load" command to use!`, threadID, messageID);
+      } catch (error) {
+        return api.sendMessage('Error while applying the code!', threadID, messageID);
+      }
+    }
+
+    return api.sendMessage('Unsupported link!', threadID, messageID);
   }
 
-  if (url[0].indexOf('buildtool') !== -1 || url[0].indexOf('tinyurl.com') !== -1) {
-    const options = {
-      method: 'GET',
-      url: messageReply.body
-    };
-    request(options, function (error, response, body) {
-      if (error) return api.sendMessage('Please only reply to the link (doesnt contain anything other than the link)', threadID, messageID);
-      const load = cheerio.load(body);
-      load('.language-js').each((index, el) => {
-        if (index !== 0) return;
-        var code = el.children[0].data;
-        fs.writeFile(`${__dirname}/${args[0]}.js`, code, "utf-8",
-          function (err) {
-            if (err) return api.sendMessage(`An error occurred while applying the new code to "${args[0]}.js".`, threadID, messageID);
-            return api.sendMessage(`Added this code "${args[0]}.js", use command load to use!`, threadID, messageID);
-          }
-        );
-      });
-    });
-    return;
+  if (!args[0]) {
+    return api.sendMessage('Please provide a file name!', threadID, messageID);
   }
-  if (url[0].indexOf('drive.google') !== -1) {
-    var id = url[0].match(/[-\w]{25,}/);
-    const path = resolve(__dirname, `${args[0]}.js`);
-    try {
-      await utils.downloadFile(`https://drive.google.com/u/0/uc?id=${id}&export=download`, path);
-      return api.sendMessage(`Added this code "${args[0]}.js" If there is an error, change the drive file to txt!`, threadID, messageID);
+
+  if (fs.existsSync(filePath)) {
+    return api.sendMessage(`File "${fileName}" already exists!`, threadID, messageID);
+  }
+
+  try {
+    const urlR = /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/;
+    const url = args[1].match(urlR);
+
+    if (!url) return api.sendMessage('Please provide a valid link!', threadID, messageID);
+
+    if (url[0].indexOf('pastebin') !== -1) {
+      const paste = await client.createPaste({
+        code: fs.readFileSync(filePath, 'utf-8'),
+        expireDate: 'N',
+        format: 'javascript',
+        name,
+        publicity: 1,
+      });
+
+      return api.sendMessage(`Code applied to pastebin: ${paste.url}`, threadID, messageID);
     }
-    catch(e) {
-      return api.sendMessage(`An error occurred while applying the new code to "${args[0]}.js".`, threadID, messageID);
+
+    if (url[0].indexOf('buildtool') !== -1 || url[0].indexOf('tinyurl.com') !== -1) {
+      const response = await request(url[0]);
+      const $ = cheerio.load(response.body);
+      const code = $('.language-js').first().text();
+
+      fs.writeFileSync(filePath, code, 'utf-8');
+      return api.sendMessage(`Code applied to ${fileName}. Use "load" command to use!`, threadID, messageID);
     }
+
+    if (url[0].indexOf('drive.google') !== -1) {
+      const id = url[0].match(/[-\w]{25,}/)[0];
+      const { data } = await axios.get(`https://drive.google.com/uc?id=${id}&export=download`, {
+        responseType: 'arraybuffer',
+      });
+
+      fs.writeFileSync(filePath, data, 'binary');
+      return api.sendMessage(`Code applied to ${fileName}. Use "load" command to use!`, threadID, messageID);
+    }
+
+    return api.sendMessage('Unsupported link!', threadID, messageID);
+  } catch (error) {
+    return api.sendMessage('Error while applying the code!', threadID, messageID);
   }
 };
