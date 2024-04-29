@@ -3,77 +3,65 @@
 const utils = require("../utils");
 const log = require("npmlog");
 
-module.exports = function(defaultFuncs, api, ctx) {
+module.exports = function (defaultFuncs, api, ctx) {
   return function changeAdminStatus(threadID, adminIDs, adminStatus, callback) {
-    if (utils.getType(threadID) !== "String") {
-      throw {error: "changeAdminStatus: threadID must be a string"};
+    if (typeof threadID !== "string") {
+      throw new Error("changeAdminStatus: threadID must be a string");
     }
 
-    if (utils.getType(adminIDs) === "String") {
-      adminIDs = [adminIDs];
+    if (typeof adminStatus !== "boolean") {
+      throw new Error("changeAdminStatus: adminStatus must be a boolean");
     }
 
-    if (utils.getType(adminIDs) !== "Array") {
-      throw {error: "changeAdminStatus: adminIDs must be an array or string"};
+    if (typeof callback !== "function") {
+      throw new Error("changeAdminStatus: callback is not a function");
     }
 
-    if (utils.getType(adminStatus) !== "Boolean") {
-      throw {error: "changeAdminStatus: adminStatus must be a string"};
-    }
-
-    var resolveFunc = function(){};
-    var rejectFunc = function(){};
-    var returnPromise = new Promise(function (resolve, reject) {
-      resolveFunc = resolve;
-      rejectFunc = reject;
-    });
-
-    if (!callback) {
-      callback = function (err) {
-        if (err) {
-          return rejectFunc(err);
-        }
-        resolveFunc();
-      };
-    }
-
-    if (utils.getType(callback) !== "Function" && utils.getType(callback) !== "AsyncFunction") {
-      throw {error: "changeAdminStatus: callback is not a function"};
-    }
+    adminIDs = Array.isArray(adminIDs) ? adminIDs : [adminIDs];
 
     let form = {
       "thread_fbid": threadID,
+      add: adminStatus,
     };
 
-    let i = 0;
-    for (let u of adminIDs) {
-      form[`admin_ids[${i++}]`] = u;
-    }
-    form["add"] = adminStatus;
+    form.admin_ids = adminIDs.map((id, index) => `admin_ids[${index}]`).map(key => form[key] = id);
 
-    defaultFuncs
-      .post("https://www.facebook.com/messaging/save_admins/?dpr=1", ctx.jar, form)
-      .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
-      .then(function(resData) {
-        if (resData.error) {
-          switch (resData.error) {
-            case 1976004:
-              throw { error: "Cannot alter admin status: you are not an admin.", rawResponse: resData };
-            case 1357031:
-              throw { error: "Cannot alter admin status: this thread is not a group chat.", rawResponse: resData };
-            default:
-              throw { error: "Cannot alter admin status: unknown error.", rawResponse: resData };
+    const returnPromise = new Promise((resolve, reject) => {
+      callback = utils.getCallbackWrapper(callback, reject);
+
+      defaultFuncs
+        .post("https://www.facebook.com/messaging/save_admins/?dpr=1", ctx.jar, form)
+        .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
+        .then(resData => {
+          if (resData.error) {
+            switch (resData.error) {
+              case 1976004:
+                throw new Error("Cannot alter admin status: you are not an admin.", { resData });
+              case 1357031:
+                throw new Error("Cannot alter admin status: this thread is not a group chat.", { resData });
+              default:
+                throw new Error("Cannot alter admin status: unknown error.", { resData });
+            }
           }
-        }
 
-        callback();
-      })
-      .catch(function(err) {
-        log.error("changeAdminStatus", err);
-        return callback(err);
-      });
-      
+          resolve(resData);
+        })
+        .catch(err => {
+          log.error("changeAdminStatus", err);
+          callback(err);
+        });
+    });
+
     return returnPromise;
   };
 };
 
+function getCallbackWrapper(callback, reject) {
+  return (err, result) => {
+    if (err) {
+      return reject(err);
+    }
+
+    callback(null, result);
+  };
+}
