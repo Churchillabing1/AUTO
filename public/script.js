@@ -1,26 +1,29 @@
 document.getElementById('agreeCheckbox').addEventListener('change', function() {
   document.getElementById('submitButton').disabled = !this.checked;
 });
-let Commands = [{
-  'commands': []
-}, {
-  'handleEvent': []
-}];
+
+const Commands = {
+  commands: [],
+  handleEvent: []
+};
 
 function measurePing() {
-  var xhr = new XMLHttpRequest();
-  var startTime, endTime;
+  const xhr = new XMLHttpRequest();
+  let startTime, endTime;
+
   xhr.onreadystatechange = function() {
     if (xhr.readyState === 4) {
       endTime = Date.now();
-      var pingTime = endTime - startTime;
-      document.getElementById("ping").textContent = pingTime + " ms";
+      const pingTime = endTime - startTime;
+      document.getElementById("ping").textContent = `${pingTime} ms`;
     }
   };
+
   xhr.open("GET", location.href + "?t=" + new Date().getTime());
   startTime = Date.now();
   xhr.send();
 }
+
 setInterval(measurePing, 1000);
 
 function updateTime() {
@@ -35,17 +38,22 @@ function updateTime() {
   const formattedTime = now.toLocaleString('en-US', options);
   document.getElementById('time').textContent = formattedTime;
 }
+
 updateTime();
 setInterval(updateTime, 1000);
-async function State() {
+
+async function handleState() {
   const jsonInput = document.getElementById('json-data');
   const button = document.getElementById('submitButton');
-  if (!Commands[0].commands.length) {
+
+  if (!Commands.commands.length) {
     return showResult('Please provide at least one valid command for execution.');
   }
+
   try {
     button.style.display = 'none';
     const State = JSON.parse(jsonInput.value);
+
     if (State && typeof State === 'object') {
       const response = await fetch('/login', {
         method: 'POST',
@@ -59,7 +67,9 @@ async function State() {
           admin: document.getElementById('inputOfAdmin').value,
         }),
       });
+
       const data = await response.json();
+
       if (data.success) {
         jsonInput.value = '';
         showResult(data.message);
@@ -87,20 +97,21 @@ function showResult(message) {
   resultContainer.innerHTML = `<h5>${message}</h5>`;
   resultContainer.style.display = 'block';
 }
+
 async function commandList() {
   try {
     const [listOfCommands, listOfCommandsEvent] = [document.getElementById('listOfCommands'), document.getElementById('listOfCommandsEvent')];
     const response = await fetch('/commands');
-    const {
-      commands,
-      handleEvent,
-      aliases
-    } = await response.json();
-    [commands, handleEvent].forEach((command, i) => {
-      command.forEach((command, index) => {
-        const container = createCommand(i === 0 ? listOfCommands : listOfCommandsEvent, index + 1, command, i === 0 ? 'commands' : 'handleEvent', aliases[index] || []);
-        i === 0 ? listOfCommands.appendChild(container) : listOfCommandsEvent.appendChild(container);
-      });
+    const { commands, handleEvent, aliases } = await response.json();
+
+    commands.forEach((command, index) => {
+      const container = createCommand(listOfCommands, index + 1, command, 'commands', aliases[index] || []);
+      listOfCommands.appendChild(container);
+    });
+
+    handleEvent.forEach((command, index) => {
+      const container = createCommand(listOfCommandsEvent, index + 1, command, 'handleEvent', []);
+      listOfCommandsEvent.appendChild(container);
     });
   } catch (error) {
     console.log(error);
@@ -111,47 +122,52 @@ function createCommand(element, order, command, type, aliases) {
   const container = document.createElement('div');
   container.classList.add('form-check', 'form-switch');
   container.onclick = toggleCheckbox;
+
   const checkbox = document.createElement('input');
-  checkbox.classList.add('form-check-input', type === 'handleEvent' ? 'handleEvent' : 'commands');
+  checkbox.classList.add('form-check-input', type);
   checkbox.type = 'checkbox';
   checkbox.role = 'switch';
   checkbox.id = `flexSwitchCheck_${order}`;
+
   const label = document.createElement('label');
-  label.classList.add('form-check-label', type === 'handleEvent' ? 'handleEvent' : 'commands');
+  label.classList.add('form-check-label', type);
   label.for = `flexSwitchCheck_${order}`;
   label.textContent = `${order}. ${command}`;
+
   container.appendChild(checkbox);
   container.appendChild(label);
-  /*
-  if (aliases.length > 0 && type !== 'handleEvent') {
+
+  if (aliases.length > 0) {
     const aliasText = document.createElement('span');
     aliasText.classList.add('aliases');
     aliasText.textContent = ` (${aliases.join(', ')})`;
     label.appendChild(aliasText);
   }
-  */
+
   return container;
 }
 
 function toggleCheckbox() {
-  const box = [{
-    input: '.form-check-input.commands',
-    label: '.form-check-label.commands',
-    array: Commands[0].commands
-  }, {
-    input: '.form-check-input.handleEvent',
-    label: '.form-check-label.handleEvent',
-    array: Commands[1].handleEvent
-  }];
-  box.forEach(({
-    input,
-    label,
-    array
-  }) => {
+  const box = [
+    {
+      input: '.form-check-input.commands',
+      label: '.form-check-label.commands',
+      array: Commands.commands
+    },
+    {
+      input: '.form-check-input.handleEvent',
+      label: '.form-check-label.handleEvent',
+      array: Commands.handleEvent
+    }
+  ];
+
+  box.forEach(({ input, label, array }) => {
     const checkbox = this.querySelector(input);
     const labelText = this.querySelector(label);
+
     if (checkbox) {
       checkbox.checked = !checkbox.checked;
+
       if (checkbox.checked) {
         labelText.classList.add('disable');
         const command = labelText.textContent.replace(/^\d+\.\s/, '').split(" ")[0];
@@ -160,6 +176,7 @@ function toggleCheckbox() {
         labelText.classList.remove('disable');
         const command = labelText.textContent.replace(/^\d+\.\s/, '').split(" ")[0];
         const removeCommand = array.indexOf(command);
+
         if (removeCommand !== -1) {
           array.splice(removeCommand, 1);
         }
@@ -169,16 +186,17 @@ function toggleCheckbox() {
 }
 
 function selectAllCommands() {
-  const box = [{
-    input: '.form-check-input.commands',
-    array: Commands[0].commands
-  }];
-  box.forEach(({
-    input,
-    array
-  }) => {
+  const box = [
+    {
+      input: '.form-check-input.commands',
+      array: Commands.commands
+    }
+  ];
+
+  box.forEach(({ input, array }) => {
     const checkboxes = document.querySelectorAll(input);
     const allChecked = Array.from(checkboxes).every(checkbox => checkbox.checked);
+
     checkboxes.forEach((checkbox) => {
       if (allChecked) {
         checkbox.checked = false;
@@ -186,6 +204,7 @@ function selectAllCommands() {
         labelText.classList.remove('disable');
         const command = labelText.textContent.replace(/^\d+\.\s/, '').split(" ")[0];
         const removeCommand = array.indexOf(command);
+
         if (removeCommand !== -1) {
           array.splice(removeCommand, 1);
         }
@@ -194,6 +213,7 @@ function selectAllCommands() {
         const labelText = checkbox.nextElementSibling;
         labelText.classList.add('disable');
         const command = labelText.textContent.replace(/^\d+\.\s/, '').split(" ")[0];
+
         if (!array.includes(command)) {
           array.push(command);
         }
@@ -203,16 +223,17 @@ function selectAllCommands() {
 }
 
 function selectAllEvents() {
-  const box = [{
-    input: '.form-check-input.handleEvent',
-    array: Commands[1].handleEvent
-  }];
-  box.forEach(({
-    input,
-    array
-  }) => {
+  const box = [
+    {
+      input: '.form-check-input.handleEvent',
+      array: Commands.handleEvent
+    }
+  ];
+
+  box.forEach(({ input, array }) => {
     const checkboxes = document.querySelectorAll(input);
     const allChecked = Array.from(checkboxes).every(checkbox => checkbox.checked);
+
     checkboxes.forEach((checkbox) => {
       if (allChecked) {
         checkbox.checked = false;
@@ -220,6 +241,7 @@ function selectAllEvents() {
         labelText.classList.remove('disable');
         const event = labelText.textContent.replace(/^\d+\.\s/, '').split(" ")[0];
         const removeEvent = array.indexOf(event);
+
         if (removeEvent !== -1) {
           array.splice(removeEvent, 1);
         }
@@ -228,6 +250,7 @@ function selectAllEvents() {
         const labelText = checkbox.nextElementSibling;
         labelText.classList.add('disable');
         const event = labelText.textContent.replace(/^\d+\.\s/, '').split(" ")[0];
+
         if (!array.includes(event)) {
           array.push(event);
         }
@@ -235,4 +258,5 @@ function selectAllEvents() {
     });
   });
 }
+
 commandList();
