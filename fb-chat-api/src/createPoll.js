@@ -1,23 +1,35 @@
 "use strict";
 
-var utils = require("../utils");
-var log = require("npmlog");
+const utils = require("../utils");
+const log = require("npmlog");
 
-module.exports = function(defaultFuncs, api, ctx) {
+module.exports = function (defaultFuncs, api, ctx) {
   return function createPoll(title, threadID, options, callback) {
-    var resolveFunc = function(){};
-    var rejectFunc = function(){};
-    var returnPromise = new Promise(function (resolve, reject) {
+    if (!title) {
+      return callback(new Error("Title is required"));
+    }
+
+    if (!threadID) {
+      return callback(new Error("Thread ID is required"));
+    }
+
+    if (typeof options !== "object") {
+      return callback(new Error("Options must be an object"));
+    }
+
+    const resolveFunc = () => {};
+    const rejectFunc = () => {};
+    const returnPromise = new Promise((resolve, reject) => {
       resolveFunc = resolve;
       rejectFunc = reject;
     });
 
     if (!callback) {
-      if (utils.getType(options) == "Function") {
+      if (utils.getType(options) === "Function") {
         callback = options;
         options = null;
       } else {
-        callback = function(err) {
+        callback = function (err) {
           if (err) {
             return rejectFunc(err);
           }
@@ -25,24 +37,22 @@ module.exports = function(defaultFuncs, api, ctx) {
         };
       }
     }
+
     if (!options) {
       options = {}; // Initial poll options are optional
     }
 
-    var form = {
+    const form = {
       target_id: threadID,
-      question_text: title
+      question_text: title,
     };
 
-    // Set fields for options (and whether they are selected initially by the posting user)
-    var ind = 0;
-    for (var opt in options) {
+    let ind = 0;
+    for (const opt in options) {
       // eslint-disable-next-line no-prototype-builtins
       if (options.hasOwnProperty(opt)) {
-        form["option_text_array[" + ind + "]"] = opt;
-        form["option_is_selected_array[" + ind + "]"] = options[opt]
-          ? "1"
-          : "0";
+        form[`option_text_array[${ind}]`] = opt;
+        form[`option_is_selected_array[${ind}]`] = options[opt] ? "1" : "0";
         ind++;
       }
     }
@@ -53,15 +63,15 @@ module.exports = function(defaultFuncs, api, ctx) {
         ctx.jar,
         form
       )
-      .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
-      .then(function(resData) {
-        if (resData.payload.status != "success") {
+      .then(utils.parseAndCheckLogin.bind(null, ctx, defaultFuncs))
+      .then((resData) => {
+        if (resData.payload.status !== "success") {
           throw resData;
         }
 
         return callback();
       })
-      .catch(function(err) {
+      .catch((err) => {
         log.error("createPoll", err);
         return callback(err);
       });
