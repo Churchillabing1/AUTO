@@ -1,23 +1,31 @@
 "use strict";
 
-var utils = require("../utils");
-var log = require("npmlog");
+const utils = require("../utils");
+const log = require("npmlog");
 
 module.exports = function (defaultFuncs, api, ctx) {
   return function changeBlockedStatus(userID, block, callback) {
-    var resolveFunc = function () { };
-    var rejectFunc = function () { };
-    var returnPromise = new Promise(function (resolve, reject) {
+    if (typeof userID !== "string") {
+      return callback(new Error("userID must be a string"));
+    }
+
+    if (typeof block !== "boolean") {
+      return callback(new Error("block must be a boolean"));
+    }
+
+    const resolveFunc = () => {};
+    const rejectFunc = err => {};
+    const returnPromise = new Promise((resolve, reject) => {
       resolveFunc = resolve;
       rejectFunc = reject;
     });
 
     if (!callback) {
-      callback = function (err) {
+      callback = (err, result) => {
         if (err) {
           return rejectFunc(err);
         }
-        resolveFunc();
+        resolveFunc(result);
       };
     }
 
@@ -29,19 +37,20 @@ module.exports = function (defaultFuncs, api, ctx) {
           fbid: userID
         }
       )
-      .then(utils.saveCookies(ctx.jar))
-      .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
+      .then(utils.saveCookies.bind(null, ctx.jar))
+      .then(utils.parseAndCheckLogin.bind(null, ctx, defaultFuncs))
       .then(function (resData) {
         if (resData.error) {
-          throw resData;
+          throw new Error(`Facebook API returned an error: ${resData.error}`);
         }
 
-        return callback();
+        return callback(null, resData);
       })
       .catch(function (err) {
         log.error("changeBlockedStatus", err);
         return callback(err);
       });
+
     return returnPromise;
   };
 };
