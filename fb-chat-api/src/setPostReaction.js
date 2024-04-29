@@ -6,8 +6,8 @@
 
 "use strict";
 
-var utils = require("../utils");
-var log = require("npmlog");
+const utils = require("../utils");
+const log = require("npmlog");
 
 function formatData(resData) {
   return {
@@ -18,92 +18,94 @@ function formatData(resData) {
   };
 }
 
+const map = {
+  unlike: 0,
+  like: 1,
+  heart: 2,
+  love: 16,
+  haha: 4,
+  wow: 3,
+  sad: 7,
+  angry: 8
+};
+
+const reactionTypes = ['unlike', 'like', 'heart', 'love', 'haha', 'wow', 'sad', 'angry'];
+
+function isValidReactionType(type) {
+  return reactionTypes.includes(type);
+}
+
+function isValidPostId(id) {
+  return typeof id === 'string' && id.length > 0;
+}
+
 module.exports = function(defaultFuncs, api, ctx) {
+  if (typeof defaultFuncs !== 'object' || defaultFuncs === null) {
+    throw new Error('setPostReaction: defaultFuncs must be an object');
+  }
+
+  if (typeof api !== 'object' || api === null) {
+    throw new Error('setPostReaction: api must be an object');
+  }
+
+  if (typeof ctx !== 'object' || ctx === null) {
+    throw new Error('setPostReaction: ctx must be an object');
+  }
+
+  if (typeof map !== 'object' || map === null) {
+    throw new Error('setPostReaction: map must be an object');
+  }
+
   return function setPostReaction(postID, type, callback) {
-    var resolveFunc = function(){};
-    var rejectFunc = function(){};
-    var returnPromise = new Promise(function (resolve, reject) {
-      resolveFunc = resolve;
-      rejectFunc = reject;
+    if (typeof callback !== 'function') {
+      throw new Error('setPostReaction: callback must be a function');
+    }
+
+    if (!isValidPostId(postID)) {
+      throw new Error('setPostReaction: Invalid post ID');
+    }
+
+    if (!isValidReactionType(type)) {
+      throw new Error('setPostReaction: Invalid reaction type');
+    }
+
+    let promise = new Promise((resolve, reject) => {
+      var form = {
+        av: ctx.userID,
+        fb_api_caller_class: "RelayModern",
+        fb_api_req_friendly_name: "CometUFIFeedbackReactMutation",
+        doc_id: "4769042373179384",
+        variables: JSON.stringify({
+          input: {
+            actor_id: ctx.userID,
+            feedback_id: `feedback:${postID}`,
+            feedback_reaction: map[type],
+            feedback_source: "OBJECT",
+            is_tracking_encrypted: true,
+            tracking: [],
+            session_id: "f7dd50dd-db6e-4598-8cd9-561d5002b423",
+            client_mutation_id: Math.round(Math.random() * 19).toString()
+          },
+          useDefaultActor: false,
+          scale: 3
+        })
+      };
+
+      defaultFuncs
+        .post("https://www.facebook.com/api/graphql/", ctx.jar, form)
+        .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
+        .then(resData => {
+          if (resData.errors) {
+            throw resData;
+          }
+          return callback(null, formatData(resData.data));
+        })
+        .catch(err => {
+          log.error("setPostReaction", err);
+          return callback(err);
+        });
     });
 
-    if (!callback) {
-      if (utils.getType(type) === "Function" || utils.getType(type) === "AsyncFunction") {
-        callback = type;
-        type = 0;
-      }
-      else {
-        callback = function (err, data) {
-          if (err) {
-            return rejectFunc(err);
-          }
-          resolveFunc(data);
-        };
-      }
-    }
-
-    var map = {
-      unlike: 0,
-      like: 1,
-      heart: 2,
-      love: 16,
-      haha: 4,
-      wow: 3,
-      sad: 7,
-      angry: 8
-    };
-    
-    if (utils.getType(type) !== "Number" && utils.getType(type) === "String") {
-      type = map[type.toLowerCase()];
-    }
-    
-    if (utils.getType(type) !== "Number" && utils.getType(type) !== "String") {
-      throw {
-        error: "setPostReaction: Invalid reaction type"
-      };
-    }
-    
-    if (type != 0 && !type) {
-      throw {
-        error: "setPostReaction: Invalid reaction type"
-      };
-    }
-    
-    var form = {
-      av: ctx.userID,
-      fb_api_caller_class: "RelayModern",
-      fb_api_req_friendly_name: "CometUFIFeedbackReactMutation",
-      doc_id: "4769042373179384",
-      variables: JSON.stringify({
-        input: {
-          actor_id: ctx.userID,
-          feedback_id: (new Buffer("feedback:" + postID)).toString("base64"),
-          feedback_reaction: type,
-          feedback_source: "OBJECT",
-          is_tracking_encrypted: true,
-          tracking: [],
-          session_id: "f7dd50dd-db6e-4598-8cd9-561d5002b423",
-          client_mutation_id: Math.round(Math.random() * 19).toString()
-        },
-        useDefaultActor: false,
-        scale: 3
-      })
-    };
-
-    defaultFuncs
-      .post("https://www.facebook.com/api/graphql/", ctx.jar, form)
-      .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
-      .then(function(resData) {
-        if (resData.errors) {
-          throw resData;
-        }
-        return callback(null, formatData(resData.data));
-      })
-      .catch(function(err) {
-        log.error("setPostReaction", err);
-        return callback(err);
-      });
-
-    return returnPromise;
+    return promise;
   };
 };
