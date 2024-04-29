@@ -1,80 +1,73 @@
 "use strict";
 
-var utils = require("../utils");
-var log = require("npmlog");
+const utils = require("../utils");
+const log = require("npmlog");
+const util = require("util");
 
-module.exports = function(defaultFuncs, api, ctx) {
-  return function getThreadInfo(threadID, callback) {
-    var resolveFunc = function(){};
-    var rejectFunc = function(){};
-    var returnPromise = new Promise(function (resolve, reject) {
-      resolveFunc = resolve;
-      rejectFunc = reject;
-    });
-
-    if (!callback) {
-      callback = function (err, friendList) {
+module.exports = function (defaultFuncs, api, ctx) {
+  async function getUserInfo(threadID) {
+    return new Promise((resolve, reject) => {
+      api.getUserInfo(threadID, (err, userRes) => {
         if (err) {
-          return rejectFunc(err);
+          return reject(err);
         }
-        resolveFunc(friendList);
-      };
-    }
-
-    var form = {
-      client: "mercury"
-    };
-
-    api.getUserInfo(threadID, function(err, userRes) {
-      if (err) {
-        return callback(err);
-      }
-      var key = Object.keys(userRes).length > 0 ? "user_ids" : "thread_fbids";
-      form["threads[" + key + "][0]"] = threadID;
-
-      if (ctx.globalOptions.pageId)
-        form.request_user_id = ctx.globalOptions.pageId;
-
-      defaultFuncs
-        .post(
-          "https://www.facebook.com/ajax/mercury/thread_info.php",
-          ctx.jar,
-          form
-        )
-        .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
-        .then(function(resData) {
-          if (resData.error) {
-            throw resData;
-          } else if (!resData.payload) {
-            throw {
-              error: "Could not retrieve thread Info."
-            };
-          }
-          var threadData = resData.payload.threads[0];
-          var userData = userRes[threadID];
-
-          if (threadData == null) {
-            throw {
-              error: "ThreadData is null"
-            };
-          }
-
-          threadData.name =
-            userData != null && userData.name != null
-              ? userData.name
-              : threadData.name;
-          threadData.image_src =
-            userData != null && userData.thumbSrc != null
-              ? userData.thumbSrc
-              : threadData.image_src;
-
-          callback(null, utils.formatThread(threadData));
-        })
-        .catch(function(err) {
-          log.error("getThreadInfo", err);
-          return callback(err);
-        });
+        resolve(userRes);
+      });
     });
-    return returnPromise;
-  };
+  }
+
+  async function formatThread(threadData, userData) {
+    return {
+      name: userData.name || threadData.name,
+      image_src: userData.thumbSrc || threadData.image_src,
+    };
+  }
+
+  async function getThreadInfo(threadID, callback) {
+    try {
+      const userRes = await getUserInfo(threadID);
+      const key = Object.keys(userRes).length > 0 ? "user_ids" : "thread_fbids";
+      const form = {
+        client: "mercury",
+        "threads[${key}][0]": threadID,
+      };
+
+      if (ctx.globalOptions.pageId) {
+        form.request_user_id = ctx.globalOptions.pageId;
+      }
+
+      const resData = await util.promisify(defaultFuncs.post)(
+        "https://www.facebook.com/ajax/mercury/thread_info.php",
+        ctx.jar,
+        form
+      );
+
+      await util.promisify(utils.parseAndCheckLogin(ctx, defaultFuncs))(resData);
+
+      if (resData.error) {
+        throw resData;
+      } else if (!resData.payload) {
+        throw {
+          error: "Could not retrieve thread Info.",
+        };
+      }
+
+      const threadData = resData.payload.threads[0];
+
+      if (threadData == null) {
+        throw {
+          error: "ThreadData is null",
+        };
+      }
+
+      const formattedThread = await formatThread(threadData, userRes[threadID]);
+
+      callback(null, formattedThread);
+    } catch (err) {
+      log.error("getThreadInfo", err);
+      return callback(err);
+    }
+  }
+
+  return getThreadInfo;
 };
