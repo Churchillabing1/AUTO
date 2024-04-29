@@ -1,23 +1,23 @@
 "use strict";
 
-var utils = require("../utils");
-var log = require("npmlog");
+const utils = require("../utils");
+const log = require("npmlog");
 
 module.exports = function(defaultFuncs, api, ctx) {
   return function resolvePhotoUrl(photoID, callback) {
-    var resolveFunc = function(){};
-    var rejectFunc = function(){};
-    var returnPromise = new Promise(function (resolve, reject) {
-      resolveFunc = resolve;
-      rejectFunc = reject;
-    });
+    if (typeof photoID !== "string") {
+      return callback(new Error("Invalid photoID"));
+    }
+
+    let resolveFunc = function() {};
+    let rejectFunc = function() {};
 
     if (!callback) {
-      callback = function (err, friendList) {
+      callback = function (err, photoUrl) {
         if (err) {
           return rejectFunc(err);
         }
-        resolveFunc(friendList);
+        resolveFunc(photoUrl);
       };
     }
 
@@ -31,15 +31,17 @@ module.exports = function(defaultFuncs, api, ctx) {
           throw resData;
         }
 
-        var photoUrl = resData.jsmods.require[0][3][0];
+        const photoUrl = resData.jsmods.require[0][3][0];
 
         return callback(null, photoUrl);
       })
       .catch(err => {
-        log.error("resolvePhotoUrl", err);
-        return callback(err);
+        if (callback) {
+          log.error("resolvePhotoUrl", err);
+          callback(err);
+        } else {
+          throw err;
+        }
       });
-
-    return returnPromise;
   };
 };
