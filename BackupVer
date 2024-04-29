@@ -8,26 +8,66 @@ const bodyParser = require('body-parser');
 const script = path.join(__dirname, 'script');
 const cron = require('node-cron');
 const config = fs.existsSync('./data') && fs.existsSync('./data/config.json') ? JSON.parse(fs.readFileSync('./data/config.json', 'utf8')) : createConfig();
-const Utils = new Object({
+const Utils = {
   commands: new Map(),
   handleEvent: new Map(),
   account: new Map(),
   cooldowns: new Map(),
-});
-fs.readdirSync(script).forEach((file) => {
-  const scripts = path.join(script, file);
-  const stats = fs.statSync(scripts);
-  if (stats.isDirectory()) {
-    fs.readdirSync(scripts).forEach((file) => {
+};
+
+try {
+  fs.readdirSync(script).forEach((file) => {
+    const scripts = path.join(script, file);
+    const stats = fs.statSync(scripts);
+    if (stats.isDirectory()) {
       try {
-        const {
-          config,
-          run,
-          handleEvent
-        } = require(path.join(scripts, file));
-        if (config) {
-          const {
-            name = [], role = '0', version = '1.0.0', hasPrefix = true, aliases = [], description = '', usage = '', credits = '', cooldown = '5'
-          } = Object.fromEntries(Object.entries(config).map(([key, value]) => [key.toLowerCase(), value]));
-          aliases.push(name);
-          
+        fs.readdirSync(scripts).forEach((file) => {
+          try {
+            const {
+              config: {
+                name = [], role = '0', version = '1.0.0', hasPrefix = true, aliases = [], description = '', usage = '', credits = '', cooldown = '5'
+              },
+              run,
+              handleEvent
+            } = require(path.join(scripts, file));
+            if (config) {
+              aliases.push(name);
+              Utils.commands.set(name.toLowerCase(), { run, config });
+              Utils.commands.set(...aliases.map(alias => [alias.toLowerCase(), { run, config }]));
+              Utils.handleEvent.set(name.toLowerCase(), handleEvent);
+              Utils.handleEvent.set(...aliases.map(alias => [alias.toLowerCase(), handleEvent]));
+            }
+          } catch (error) {
+            console.error(chalk.red(`Error loading script ${path.join(scripts, file)}`), error);
+          }
+        });
+      } catch (error) {
+        console.error(chalk.red(`Error loading directory ${scripts}`), error);
+      }
+    }
+  });
+} catch (error) {
+  console.error(chalk.red(`Error loading directory ${script}`), error);
+}
+
+// ...
+
+Utils.commands.forEach((value, key) => {
+  const { run, config } = value;
+  // ...
+});
+
+Utils.handleEvent.forEach((value, key) => {
+  // ...
+});
+
+Utils.commands.clear();
+Utils.handleEvent.clear();
+
+// ...
+
+Utils.commands.get(key);
+Utils.handleEvent.get(key);
+
+Utils.commands.delete(key);
+Utils.handleEvent.delete(key);
