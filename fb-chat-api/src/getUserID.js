@@ -18,21 +18,13 @@ function formatData(data) {
 }
 
 module.exports = function(defaultFuncs, api, ctx) {
-  return function getUserID(name, callback) {
-    var resolveFunc = function(){};
-    var rejectFunc = function(){};
-    var returnPromise = new Promise(function (resolve, reject) {
-      resolveFunc = resolve;
-      rejectFunc = reject;
-    });
+  if (!ctx || !ctx.userID) {
+    throw new Error("Context object or userID is missing");
+  }
 
-    if (!callback) {
-      callback = function (err, friendList) {
-        if (err) {
-          return rejectFunc(err);
-        }
-        resolveFunc(friendList);
-      };
+  return function getUserID(name, callback) {
+    if (typeof name !== "string") {
+      throw new Error("name parameter must be a string");
     }
 
     var form = {
@@ -44,7 +36,7 @@ module.exports = function(defaultFuncs, api, ctx) {
       request_id: utils.getGUID()
     };
 
-    defaultFuncs
+    return defaultFuncs
       .get("https://www.facebook.com/ajax/typeahead/search.php", ctx.jar, form)
       .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
       .then(function(resData) {
@@ -54,13 +46,15 @@ module.exports = function(defaultFuncs, api, ctx) {
 
         var data = resData.payload.entries;
 
-        callback(null, data.map(formatData));
+        if (data.length === 0) {
+          return callback(new Error("No user found with the given name"));
+        }
+
+        return callback(null, formatData(data[0]));
       })
       .catch(function(err) {
         log.error("getUserID", err);
         return callback(err);
       });
-
-    return returnPromise;
   };
 };
