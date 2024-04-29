@@ -5,21 +5,16 @@ var log = require("npmlog");
 
 module.exports = function(defaultFuncs, api, ctx) {
   return function unsendMessage(messageID, callback) {
-    var resolveFunc = function(){};
-    var rejectFunc = function(){};
-    var returnPromise = new Promise(function (resolve, reject) {
-      resolveFunc = resolve;
-      rejectFunc = reject;
+    var promise = new Promise(function (resolve, reject) {
+      if (!callback) {
+        callback = function (err, friendList) {
+          if (err) {
+            return reject(err);
+          }
+          resolve(friendList);
+        };
+      }
     });
-
-    if (!callback) {
-      callback = function (err, friendList) {
-        if (err) {
-          return rejectFunc(err);
-        }
-        resolveFunc(friendList);
-      };
-    }
 
     var form = {
       message_id: messageID
@@ -31,7 +26,9 @@ module.exports = function(defaultFuncs, api, ctx) {
         ctx.jar,
         form
       )
-      .then(utils.parseAndCheckLogin(ctx, defaultFuncs))
+      .then(function(response) {
+        return utils.parseAndCheckLogin(ctx, defaultFuncs)(response);
+      })
       .then(function(resData) {
         if (resData.error) {
           throw resData;
@@ -40,10 +37,19 @@ module.exports = function(defaultFuncs, api, ctx) {
         return callback();
       })
       .catch(function(err) {
+        if (err.response) {
+          // Handle HTTP errors
+          err = err.response.body;
+        }
+
         log.error("unsendMessage", err);
         return callback(err);
+      })
+      .finally(function() {
+        // Make sure the returned promise is always resolved or rejected
+        callback = null;
       });
 
-    return returnPromise;
+    return promise;
   };
 };
