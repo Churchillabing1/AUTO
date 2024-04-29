@@ -1,104 +1,102 @@
 "use strict";
 
-var utils = require("../utils");
-var log = require("npmlog");
+import { postFormData } from "../utils";
+import { parseAndCheckLogin } from "../facebook/utils";
+import { Jar } from "request";
+import { npmlog } from "npmlog";
 
-module.exports = function(defaultFuncs, api, ctx) {
-  return function setMessageReaction(reaction, messageID, callback, forceCustomReaction) {
-    var resolveFunc = function(){};
-    var rejectFunc = function(){};
-    var returnPromise = new Promise(function (resolve, reject) {
-      resolveFunc = resolve;
-      rejectFunc = reject;
+interface ISetMessageReactionOptions {
+  reaction: string;
+  messageID: string;
+  callback?: (err: Error | null, result?: any) => void;
+  forceCustomReaction?: boolean;
+}
+
+interface IReactionMapping {
+  [key: string]: string;
+}
+
+const reactionMapping: IReactionMapping = {
+  ":heart_eyes:": "\uD83D\uDE0D",
+  ":love:": "\uD83D\uDE0D",
+  ":laughing:": "\uD83D\uDE06",
+  ":haha:": "\uD83D\uDE06",
+  ":open_mouth:": "\uD83D\uDE2E",
+  ":wow:": "\uD83D\uDE2E",
+  ":cry:": "\uD83D\uDE22",
+  ":sad:": "\uD83D\uDE22",
+  ":angry:": "\uD83D\uDE20",
+  ":like:": "\uD83D\uDC4D",
+  ":dislike:": "\uD83D\uDC4E",
+  ":glowingheart:": "\uD83D\uDC97",
+};
+
+const validReactions = [
+  "\uD83D\uDE0D", //:heart_eyes:
+  "\uD83D\uDE06", //:laughing:
+  "\uD83D\uDE2E", //:open_mouth:
+  "\uD83D\uDE22", //:cry:
+  "\uD83D\uDE20", //:angry:
+  "\uD83D\uDC4D", //:thumbsup:
+  "\uD83D\uDC4E", //:thumbsdown:
+  "\u2764", //:heart:
+  "\uD83D\uDC97", //:glowingheart:
+  "",
+];
+
+module.exports = function (defaultFuncs, api, ctx) {
+  return function setMessageReaction({
+    reaction,
+    messageID,
+    callback,
+    forceCustomReaction,
+  }: ISetMessageReactionOptions) {
+    const returnPromise = new Promise<void>((resolve, reject) => {
+      if (!callback) {
+        callback = (err: Error | null, result?: any) => {
+          if (err) {
+            return reject(err);
+          }
+          resolve();
+        };
+      }
     });
 
-    if (!callback) {
-      callback = function (err, friendList) {
-        if (err) {
-          return rejectFunc(err);
-        }
-        resolveFunc(friendList);
-      };
+    const isValidReaction = (reaction: string) =>
+      validReactions.includes(reaction) || reactionMapping[reaction];
+
+    const normalizedReaction =
+      reactionMapping[reaction] ||
+      (isValidReaction(reaction) ? reaction : forceCustomReaction ? reaction : null);
+
+    if (!normalizedReaction) {
+      return callback({ error: "Reaction is not a valid emoji." });
     }
 
-    switch (reaction) {
-      case "\uD83D\uDE0D": //:heart_eyes:
-      case "\uD83D\uDE06": //:laughing:
-      case "\uD83D\uDE2E": //:open_mouth:
-      case "\uD83D\uDE22": //:cry:
-      case "\uD83D\uDE20": //:angry:
-      case "\uD83D\uDC4D": //:thumbsup:
-      case "\uD83D\uDC4E": //:thumbsdown:
-      case "\u2764": //:heart:
-      case "\uD83D\uDC97": //:glowingheart:
-      case "":
-        //valid
-        break;
-      case ":heart_eyes:":
-      case ":love:":
-        reaction = "\uD83D\uDE0D";
-        break;
-      case ":laughing:":
-      case ":haha:":
-        reaction = "\uD83D\uDE06";
-        break;
-      case ":open_mouth:":
-      case ":wow:":
-        reaction = "\uD83D\uDE2E";
-        break;
-      case ":cry:":
-      case ":sad:":
-        reaction = "\uD83D\uDE22";
-        break;
-      case ":angry:":
-        reaction = "\uD83D\uDE20";
-        break;
-      case ":thumbsup:":
-      case ":like:":
-        reaction = "\uD83D\uDC4D";
-        break;
-      case ":thumbsdown:":
-      case ":dislike:":
-        reaction = "\uD83D\uDC4E";
-        break;
-      case ":heart:":
-        reaction = "\u2764";
-        break;
-      case ":glowingheart:":
-        reaction = "\uD83D\uDC97";
-        break;
-      default:
-        if (forceCustomReaction) {
-          break; 
-        }
-        return callback({ error: "Reaction is not a valid emoji." });
-    }
-
-    var variables = {
+    const variables = {
       data: {
         client_mutation_id: ctx.clientMutationId++,
         actor_id: ctx.userID,
-        action: reaction == "" ? "REMOVE_REACTION" : "ADD_REACTION",
+        action: normalizedReaction === "" ? "REMOVE_REACTION" : "ADD_REACTION",
         message_id: messageID,
-        reaction: reaction
-      }
+        reaction: normalizedReaction,
+      },
     };
 
-    var qs = {
+    const qs = {
       doc_id: "1491398900900362",
       variables: JSON.stringify(variables),
-      dpr: 1
+      dpr: 1,
     };
 
-    defaultFuncs
-      .postFormData(
-        "https://www.facebook.com/webgraphql/mutation/",
-        ctx.jar,
-        {},
-        qs
-      )
-      .then(utils.parseAndCheckLogin(ctx.jar, defaultFuncs))
-      .then(function(resData) {
+    postFormData(
+      "https://www.facebook.com/webgraphql/mutation/",
+      ctx.jar,
+      {},
+      qs
+    )
+      .then((resData) => parseAndCheckLogin(ctx.jar, defaultFuncs, resData))
+      .then((resData) => {
         if (!resData) {
           throw { error: "setReaction returned empty object." };
         }
@@ -107,8 +105,8 @@ module.exports = function(defaultFuncs, api, ctx) {
         }
         callback(null);
       })
-      .catch(function(err) {
-        log.error("setReaction", err);
+      .catch((err) => {
+        npmlog.error("setReaction", err);
         return callback(err);
       });
 
